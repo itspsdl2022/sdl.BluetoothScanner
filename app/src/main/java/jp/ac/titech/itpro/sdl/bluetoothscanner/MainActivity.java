@@ -168,7 +168,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onSaveInstanceState(Bundle outState) {
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
         Log.d(TAG, "onSaveInstanceState");
         outState.putParcelableArrayList(KEY_DEVLIST, devices);
@@ -212,14 +212,12 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int reqCode, int resCode, Intent data) {
         Log.d(TAG, "onActivityResult");
-        switch (reqCode) {
-            case REQ_ENABLE_BLUETOOTH:
-                if (resCode != Activity.RESULT_OK) {
-                    String text = getString(R.string.toast_bluetooth_must_be_enabled);
-                    Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
-                    finish();
-                }
-                break;
+        if (reqCode == REQ_ENABLE_BLUETOOTH) {
+            if (resCode != Activity.RESULT_OK) {
+                String text = getString(R.string.toast_bluetooth_must_be_enabled);
+                Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
+                finish();
+            }
         }
         super.onActivityResult(reqCode, resCode, data);
     }
@@ -238,17 +236,15 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onRequestPermissionsResult(int reqCode, @NonNull String[] permissions, @NonNull int[] grants) {
         Log.d(TAG, "onRequestPermissionsResult");
-        switch (reqCode) {
-            case REQ_PERMISSIONS:
-                for (int i = 0; i < grants.length; i++) {
-                    if (grants[i] != PackageManager.PERMISSION_GRANTED) {
-                        String text = getString(R.string.error_scanning_requires_permission, permissions[i]);
-                        Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
-                        return;
-                    }
+        if (reqCode == REQ_PERMISSIONS) {
+            for (int i = 0; i < grants.length; i++) {
+                if (grants[i] != PackageManager.PERMISSION_GRANTED) {
+                    String text = getString(R.string.error_scanning_requires_permission, permissions[i]);
+                    Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
+                    return;
                 }
-                startScan1();
-                break;
+            }
+            startScan1();
         }
     }
 
