@@ -1,6 +1,7 @@
 package jp.ac.titech.itpro.sdl.bluetoothscanner;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -16,7 +17,6 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.ProgressBar;
@@ -90,16 +90,13 @@ public class MainActivity extends AppCompatActivity {
 
         devicesView = findViewById(R.id.devices);
         devicesView.setAdapter(devicesAdapter);
-        devicesView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int pos, long id) {
-                BluetoothDevice device = (BluetoothDevice) parent.getItemAtPosition(pos);
-                new AlertDialog.Builder(view.getContext())
-                        .setTitle(caption(device))
-                        .setMessage(device.getAddress())
-                        .setPositiveButton(android.R.string.ok, null)
-                        .show();
-            }
+        devicesView.setOnItemClickListener((parent, view, pos, id) -> {
+            BluetoothDevice device = (BluetoothDevice) parent.getItemAtPosition(pos);
+            new AlertDialog.Builder(view.getContext())
+                    .setTitle(caption(device))
+                    .setMessage(device.getAddress())
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show();
         });
 
         // progress bar fo scanning
@@ -188,6 +185,7 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
+    @SuppressLint("NonConstantResourceId")
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         Log.d(TAG, "onOptionsItemSelected");
