@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -23,24 +24,35 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 
 import java.util.ArrayList;
+import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
     private final static String TAG = MainActivity.class.getSimpleName();
 
-    private final static int REQ_ENABLE_BLUETOOTH = 1111;
-    private final static int REQ_PERMISSIONS = 2222;
-    private final static String[] PERMISSIONS = {
+    private final static String[] PERMISSIONS_30 = {
             Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.ACCESS_FINE_LOCATION
+            Manifest.permission.ACCESS_FINE_LOCATION,
     };
+
+    @RequiresApi(api = Build.VERSION_CODES.S)
+    private final static String[] PERMISSIONS = {
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+    };
+
+    private final String[] permissions = Build.VERSION.SDK_INT > 30 ? PERMISSIONS : PERMISSIONS_30;
 
     private final static String KEY_DEVLIST = "MainActivity.devices";
 
@@ -54,6 +66,7 @@ public class MainActivity extends AppCompatActivity {
     private IntentFilter scanFilter;
 
     @Override
+    @SuppressLint("MissingPermission")
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Log.d(TAG, "onCreate");
@@ -112,14 +125,17 @@ public class MainActivity extends AppCompatActivity {
                 }
                 switch (action) {
                     case BluetoothAdapter.ACTION_DISCOVERY_STARTED:
+                        Log.d(TAG, "ACTION_DISCOVERY_STARTED");
                         scanProgress.setIndeterminate(true);
                         invalidateOptionsMenu();
                         break;
                     case BluetoothAdapter.ACTION_DISCOVERY_FINISHED:
+                        Log.d(TAG, "ACTION_DISCOVERY_FINISHED");
                         scanProgress.setIndeterminate(false);
                         invalidateOptionsMenu();
                         break;
                     case BluetoothDevice.ACTION_FOUND:
+                        Log.d(TAG, "ACTION_FOUND");
                         BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
                         if (devicesAdapter.getPosition(device) < 0) {
                             devicesAdapter.add(device);
@@ -141,11 +157,35 @@ public class MainActivity extends AppCompatActivity {
             finish();
             return;
         }
-        if (!bluetoothAdapter.isEnabled()) {
+        if (bluetoothAdapter.isEnabled()) {
+            permissionRequester.launch(permissions);
+        } else {
             Intent intent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-            startActivityForResult(intent, REQ_ENABLE_BLUETOOTH);
+            bluetoothEnabler.launch(intent);
         }
     }
+
+    ActivityResultLauncher<String[]> permissionRequester =
+            registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), states -> {
+                for (Map.Entry<String, Boolean> s : states.entrySet()) {
+                    if (!s.getValue()) {
+                        String text = getString(R.string.error_scanning_requires_permission, s.getKey());
+                        Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                }
+                invalidateOptionsMenu();
+            });
+
+    ActivityResultLauncher<Intent> bluetoothEnabler = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() != Activity.RESULT_OK) {
+                    String text = getString(R.string.toast_bluetooth_must_be_enabled);
+                    Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
+                } else {
+                    permissionRequester.launch(permissions);
+                }
+            });
 
     @Override
     protected void onResume() {
@@ -155,6 +195,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    @SuppressLint("MissingPermission")
     protected void onPause() {
         super.onPause();
         Log.d(TAG, "onPause");
@@ -172,10 +213,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
+    public boolean onPrepareOptionsMenu(Menu menu) {
         Log.d(TAG, "onCreateOptionsMenu");
         getMenuInflater().inflate(R.menu.main, menu);
-        if (bluetoothAdapter != null && bluetoothAdapter.isDiscovering()) {
+        if (ActivityCompat.checkSelfPermission(this, permissions[0]) != PackageManager.PERMISSION_GRANTED) {
+            menu.findItem(R.id.menu_scan).setVisible(false);
+            menu.findItem(R.id.menu_stop).setVisible(false);
+        } else if (bluetoothAdapter != null && bluetoothAdapter.isDiscovering()) {
             menu.findItem(R.id.menu_scan).setVisible(false);
             menu.findItem(R.id.menu_stop).setVisible(true);
         } else {
@@ -207,59 +251,24 @@ public class MainActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
-    @Override
-    protected void onActivityResult(int reqCode, int resCode, Intent data) {
-        Log.d(TAG, "onActivityResult");
-        if (reqCode == REQ_ENABLE_BLUETOOTH) {
-            if (resCode != Activity.RESULT_OK) {
-                String text = getString(R.string.toast_bluetooth_must_be_enabled);
-                Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
-                finish();
-            }
-        }
-        super.onActivityResult(reqCode, resCode, data);
-    }
-
+    @SuppressLint("MissingPermission")
     private void startScan() {
         Log.d(TAG, "startScan");
-        for (String permission : PERMISSIONS) {
-            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, PERMISSIONS, REQ_PERMISSIONS);
-                return;
-            }
-        }
-        startScan1();
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int reqCode, @NonNull String[] permissions, @NonNull int[] grants) {
-        Log.d(TAG, "onRequestPermissionsResult");
-        if (reqCode == REQ_PERMISSIONS) {
-            for (int i = 0; i < grants.length; i++) {
-                if (grants[i] != PackageManager.PERMISSION_GRANTED) {
-                    String text = getString(R.string.error_scanning_requires_permission, permissions[i]);
-                    Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
-                    return;
-                }
-            }
-            startScan1();
-        }
-    }
-
-    private void startScan1() {
-        Log.d(TAG, "startScan1");
         devicesAdapter.clear();
         if (bluetoothAdapter.isDiscovering()) {
             bluetoothAdapter.cancelDiscovery();
         }
-        bluetoothAdapter.startDiscovery();
+        boolean result = bluetoothAdapter.startDiscovery();
+        Log.d(TAG, "result = " + result);
     }
 
+    @SuppressLint("MissingPermission")
     private void stopScan() {
         Log.d(TAG, "stopScan");
         bluetoothAdapter.cancelDiscovery();
     }
 
+    @SuppressLint("MissingPermission")
     private static String caption(BluetoothDevice device) {
         String name = device.getName();
         return name == null ? "(no name)" : name;
